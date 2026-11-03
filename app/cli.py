@@ -11,6 +11,10 @@ def main():
         from .postgres import reset_and_import
         print(reset_and_import(Path(__file__).resolve().parents[1]))
         return
+    if command == "ingest-policy":
+        from .postgres import ingest_policy
+        print({"policy_chunks": ingest_policy(Path(__file__).resolve().parents[1])})
+        return
     message = " ".join(sys.argv[2:] if command == "chat" else sys.argv[1:])
     print(respond(store, message))
 

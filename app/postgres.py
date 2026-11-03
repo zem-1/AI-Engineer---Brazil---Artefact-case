@@ -46,3 +46,28 @@ def policy_chunks(text: str, document: str, version: str = "2.1") -> list[dict]:
         digest = hashlib.sha256(f"{document}:{version}:{page}:{clean}".encode()).hexdigest()
         chunks.append({"document_name": document, "document_version": version, "section": section, "page": page, "content": clean, "source_hash": digest})
     return chunks
+
+def ingest_policy(root: Path) -> int:
+    try:
+        from pypdf import PdfReader
+        from sentence_transformers import SentenceTransformer
+    except ImportError as exc:
+        raise RuntimeError("Install policy ingestion support with: pip install -e '.[postgres]'") from exc
+    data = source_data_dir(root)
+    pdf = next(data.glob("*.pdf"), None)
+    if pdf is None: raise FileNotFoundError("Policy PDF not found")
+    pages = PdfReader(str(pdf)).pages
+    text = "\f".join(page.extract_text() or "" for page in pages)
+    chunks = policy_chunks(text, pdf.name)
+    model = SentenceTransformer(os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
+    vectors = model.encode([chunk["content"] for chunk in chunks], normalize_embeddings=True)
+    if not vectors.size or vectors.shape[1] != 384: raise ValueError(f"Expected embedding dimension 384, got {vectors.shape[1]}")
+    with connect() as conn:
+        conn.execute(SCHEMA.read_text(encoding="utf-8"))
+        with conn.cursor() as cur:
+            for chunk, vector in zip(chunks, vectors):
+                cur.execute("""INSERT INTO policy_chunks (document_name, document_version, section, page, content, embedding, source_hash)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (source_hash) DO UPDATE SET content=EXCLUDED.content, embedding=EXCLUDED.embedding""",
+                    (*[chunk[k] for k in ("document_name", "document_version", "section", "page", "content")], "[" + ",".join(str(float(x)) for x in vector) + "]", chunk["source_hash"]))
+        conn.commit()
+    return len(chunks)

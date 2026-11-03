@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 from app.core import Store, installments, sale_price
+from app.postgres import policy_chunks
 
 class CoreTests(unittest.TestCase):
     @classmethod
@@ -16,5 +17,9 @@ class CoreTests(unittest.TestCase):
     def test_installment_threshold(self): self.assertFalse(installments(Decimal("49"), 3)["eligible"])
     def test_privacy(self): self.assertFalse(self.store.get_order(1)["authorized"])
     def test_evidence_has_source_metadata(self): self.assertTrue(all({"document", "section", "page"} <= set(x) for x in self.store.policy_search("pix")))
+    def test_policy_chunk_has_source_hash(self):
+        chunks = policy_chunks("Heading\nPIX is not stackable\fReturns in seven days", "policy.pdf")
+        self.assertEqual([c["page"] for c in chunks], [1, 2])
+        self.assertTrue(all(c["source_hash"] for c in chunks))
 
 if __name__ == "__main__": unittest.main()
