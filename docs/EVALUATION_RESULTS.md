@@ -10,6 +10,7 @@ This file records executions, not expected behavior. Run `python -m unittest dis
 - `python -m app.cli evaluate`: **10 passed, 0 failed**.
 - Execution mode: deterministic local mock; no LLM, Docker, or PostgreSQL was used.
 - Limitation: the policy fixture is not yet produced by PDF ingestion, so this does not validate pgvector retrieval.
+- PostgreSQL ingestion code is implemented but was not executed in this environment because Docker, psycopg, pypdf, and sentence-transformers were not installed.
 
 The local mock does not call an LLM and does not claim semantic vector quality. Policy evidence is inspectable through `document`, `section`, and `page`; the current local fixture is a minimal verified subset until the Postgres ingestion path is run against the PDF. The multi-tool case is a routing smoke test, not proof of production authorization.
 
