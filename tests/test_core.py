@@ -1,4 +1,4 @@
-import unittest
+import os, unittest
 from decimal import Decimal
 from pathlib import Path
 from app.core import Store, installments, sale_price
@@ -27,6 +27,7 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError): call_tool(self.store, "execute_sql", {"query": "DROP TABLE products"})
     def test_tool_registry_is_bounded(self): self.assertNotIn("execute_sql", TOOL_NAMES)
     def test_mock_agent_is_available_without_credentials(self):
+        os.environ["LLM_PROVIDER"] = "mock"
         result = run_agent(self.store, "Tem violão disponível até R$ 700?")
         self.assertIn("search_products", result["tools"])
 
