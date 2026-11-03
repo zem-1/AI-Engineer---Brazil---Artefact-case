@@ -35,5 +35,11 @@ class CoreTests(unittest.TestCase):
     def test_order_status_is_customer_facing_ptbr(self):
         from app.core import respond
         self.assertIn("entregue", respond(self.store, "Qual o status do pedido 1?", "3")["answer"])
+    def test_ollama_mode_reports_missing_local_service(self):
+        import os
+        from app.agent import run_agent
+        os.environ["LLM_PROVIDER"] = "ollama"
+        with self.assertRaises(RuntimeError): run_agent(self.store, "oi")
+        os.environ["LLM_PROVIDER"] = "mock"
 
 if __name__ == "__main__": unittest.main()

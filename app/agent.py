@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json, os
+from urllib.error import URLError, HTTPError
+from urllib.request import Request, urlopen
 from .core import respond
 from .tools import call_tool
 
@@ -18,6 +20,8 @@ INSTRUCTIONS = """You are a friendly Brazilian Portuguese music-store attendant.
 def run_agent(store, message: str, verification: str | None = None) -> dict:
     if os.getenv("LLM_PROVIDER", "mock") == "mock":
         return respond(store, message, verification)
+    if os.getenv("LLM_PROVIDER") == "ollama":
+        return run_ollama(store, message, verification)
     if os.getenv("LLM_PROVIDER") != "openai": raise RuntimeError("Unsupported LLM_PROVIDER; use mock or openai")
     try: from openai import OpenAI
     except ImportError as exc: raise RuntimeError("Install API support with: pip install -e '.[api]'") from exc
@@ -37,3 +41,29 @@ def run_agent(store, message: str, verification: str | None = None) -> dict:
         inputs.append({"type": "function_call_output", "call_id": call.call_id, "output": json.dumps(result, default=str, ensure_ascii=False)})
     final = client.responses.create(model=model, instructions=INSTRUCTIONS, input=inputs, tools=TOOL_SCHEMAS)
     return {"answer": final.output_text, "tools": used, "evidence": evidence}
+
+def run_ollama(store, message: str, verification: str | None = None) -> dict:
+    """Run the same bounded tool loop against a local Ollama server."""
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    model = os.getenv("LLM_MODEL", "llama3.1:8b")
+    ollama_tools = [{"type": "function", "function": {"name": tool["name"], "description": tool["description"], "parameters": tool["parameters"]}} for tool in TOOL_SCHEMAS]
+    messages = [{"role": "system", "content": INSTRUCTIONS}, {"role": "user", "content": message}]
+    used, evidence = [], []
+    for _ in range(4):
+        payload = json.dumps({"model": model, "messages": messages, "tools": ollama_tools, "stream": False}).encode()
+        request = Request(base_url + "/api/chat", data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urlopen(request, timeout=90) as response: result = json.loads(response.read().decode())
+        except (URLError, HTTPError, TimeoutError) as exc:
+            raise RuntimeError(f"Ollama is unavailable at {base_url}; start Ollama and pull {model}") from exc
+        assistant = result.get("message", {})
+        calls = assistant.get("tool_calls") or []
+        messages.append(assistant)
+        if not calls: return {"answer": assistant.get("content", ""), "tools": used, "evidence": evidence}
+        for call in calls:
+            function = call.get("function", {}); name = function.get("name"); args = function.get("arguments") or {}
+            if name == "get_order_status" and verification is not None: args["verification"] = verification
+            output = call_tool(store, name, args); used.append(name)
+            if name == "search_policy": evidence.extend(output)
+            messages.append({"role": "tool", "content": json.dumps(output, default=str, ensure_ascii=False)})
+    raise RuntimeError("Ollama tool loop exceeded the maximum of 4 turns")

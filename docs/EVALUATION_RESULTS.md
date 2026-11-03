@@ -16,6 +16,7 @@ This file records executions, not expected behavior. Run `python -m unittest dis
 - Lexical fallback validation: `python -m app.cli ingest-policy-lexical` imported **8 policy chunks**, and a PostgreSQL full-text query returned document, section, page, and text evidence. Semantic embeddings remain optional and are not claimed as executed.
 - Mock agent validation: **9 unit tests passed**; the LLM adapter exposes native function-tool schemas and requires `OPENAI_API_KEY` when `LLM_PROVIDER=openai`. No real provider call is claimed without a configured key.
 - Mock intent refinement: **11 unit tests passed**; status responses are PT-BR and the combined “troca por defeito” scenario retrieves the `defects` evidence instead of an unrelated payment rule.
+- Ollama adapter validation: **12 unit tests passed**. The local provider is optional and reports a clear error when Ollama is not installed or reachable; no Ollama model execution is claimed on this machine.
 
 The local mock does not call an LLM and does not claim semantic vector quality. Policy evidence is inspectable through `document`, `section`, and `page`; the current local fixture is a minimal verified subset until the Postgres ingestion path is run against the PDF. The multi-tool case is a routing smoke test, not proof of production authorization.
 

@@ -12,7 +12,7 @@ python -m app.cli evaluate
 python -m app.cli chat "Tem violão disponível até R$ 700?"
 ```
 
-For optional OpenAI tool calling, install the API extra, set `LLM_PROVIDER=openai`, `LLM_MODEL`, and `OPENAI_API_KEY` in the environment, then run the API. Without a key, keep `LLM_PROVIDER=mock`; the deterministic agent remains available and no successful LLM execution is claimed.
+For optional local Ollama tool calling, install the API extra, install Ollama separately, pull a tool-capable model, set `LLM_PROVIDER=ollama`, `LLM_MODEL`, and optionally `OLLAMA_BASE_URL`. Ollama is not required for installation or evaluation. Without a local LLM, keep `LLM_PROVIDER=mock`; the deterministic agent remains available. OpenAI is also an optional provider when configured, but no key is required by this repository.
 
 Install the runtime extras for API/Postgres execution with `pip install -e .[api,postgres]`, copy `.env.example` to `.env`, then start `docker compose up -d db`. Run `python -m app.cli ingest` for the six CSVs and `python -m app.cli ingest-policy-lexical` for reproducible PDF extraction and PostgreSQL full-text evidence. Use `python -m app.cli ingest-policy` when the embedding model is available for pgvector semantic retrieval. The source CSV/PDF files remain local by design.
 
@@ -26,7 +26,7 @@ O avaliador local funciona sem credenciais ou pacotes de terceiros; o caminho Fa
 
 Para usar PostgreSQL e a recuperação de políticas, instale `pip install -e .[api,postgres]`, copie `.env.example` para `.env`, inicie `docker compose up -d db`, rode `python -m app.cli ingest` para os CSVs e `python -m app.cli ingest-policy-lexical` para o PDF. Use `python -m app.cli ingest-policy` quando o modelo de embeddings estiver disponível. Os arquivos-fonte permanecem locais por decisão de segurança.
 
-Para usar function calling opcional com OpenAI, defina `LLM_PROVIDER=openai`, `LLM_MODEL` e `OPENAI_API_KEY`. Sem chave, mantenha `LLM_PROVIDER=mock`; o agente determinístico continua disponível e nenhuma execução LLM bem-sucedida é afirmada sem teste real.
+Para usar function calling local opcional com Ollama, instale o Ollama separadamente, baixe um modelo compatível com tools, defina `LLM_PROVIDER=ollama`, `LLM_MODEL` e, se necessário, `OLLAMA_BASE_URL`. Ollama não é obrigatório para instalação ou avaliação. Sem LLM local, mantenha `LLM_PROVIDER=mock`; o agente determinístico continua disponível. OpenAI também é um provider opcional, mas nenhuma chave é necessária neste repositório.
 
 Os comandos acima executam os testes, a avaliação determinística e o CLI. Para a execução com banco, instale os extras, copie `.env.example` para `.env`, inicie `docker compose up -d db` e rode `python -m app.cli ingest`. Os CSVs/PDFs devem estar em `Desafio Técnico AI Engineer 2026/data/`.
 
