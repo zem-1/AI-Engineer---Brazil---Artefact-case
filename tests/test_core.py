@@ -30,5 +30,10 @@ class CoreTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "mock"
         result = run_agent(self.store, "Tem violão disponível até R$ 700?")
         self.assertIn("search_products", result["tools"])
+    def test_policy_intent_prefers_defect(self):
+        self.assertEqual(self.store.policy_search("troca por defeito")[0]["section"], "defects")
+    def test_order_status_is_customer_facing_ptbr(self):
+        from app.core import respond
+        self.assertIn("entregue", respond(self.store, "Qual o status do pedido 1?", "3")["answer"])
 
 if __name__ == "__main__": unittest.main()

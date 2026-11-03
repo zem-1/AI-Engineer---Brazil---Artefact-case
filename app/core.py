@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import csv, re
+import csv, re, unicodedata
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -47,10 +47,10 @@ class Store:
         self.promotions = self._promotions(data / "desafio_tecnico_ai_eng - promotions.csv")
         self.orders = self._orders(data / "desafio_tecnico_ai_eng - orders.csv")
         self.order_items = self._rows(data / "desafio_tecnico_ai_eng - order_items.csv")
-        self.policy = [{"document": "políticas_da_loja.pdf", "section": "payment", "page": 4,
-                        "text": "PIX tem 5% sobre o preço de lista e não acumula com promoção."},
-                       {"document": "políticas_da_loja.pdf", "section": "returns", "page": 6,
-                        "text": "Arrependimento deve ser solicitado em até 7 dias corridos do recebimento."}]
+        self.policy = [{"document": "políticas_da_loja.pdf", "section": "payment", "page": 4, "text": "PIX tem 5% sobre o preço de lista e não acumula com promoção."},
+                       {"document": "políticas_da_loja.pdf", "section": "returns", "page": 6, "text": "Arrependimento deve ser solicitado em até 7 dias corridos do recebimento."},
+                       {"document": "políticas_da_loja.pdf", "section": "exchanges", "page": 7, "text": "Trocas por preferência devem ser solicitadas em até 7 dias, observando as condições do produto."},
+                       {"document": "políticas_da_loja.pdf", "section": "defects", "page": 8, "text": "Em caso de defeito, a loja orienta o atendimento para análise e encaminhamento conforme a garantia aplicável."}]
 
     @staticmethod
     def _rows(path):
@@ -65,8 +65,15 @@ class Store:
         if not order or verification != str(order.customer_id): return {"authorized": False, "reason": "verification_required"}
         return {"authorized": True, "order_id": order.order_id, "status": order.status, "total": order.total}
     def policy_search(self, query):
-        terms = set(re.findall(r"[\wÀ-ÿ]+", query.lower()))
-        ranked = sorted(self.policy, key=lambda x: len(terms & set(x["text"].lower().split())), reverse=True)
+        normalize = lambda value: "".join(c for c in unicodedata.normalize("NFD", value.lower()) if unicodedata.category(c) != "Mn")
+        normalized = normalize(query)
+        terms = set(re.findall(r"[a-z0-9]+", normalized))
+        def score(item):
+            value = len(terms & set(re.findall(r"[a-z0-9]+", normalize(item["text"]))))
+            if item["section"] == "defects" and any(word in normalized for word in ("defeito", "garantia")): value += 10
+            if item["section"] == "exchanges" and "troca" in normalized and not any(word in normalized for word in ("defeito", "garantia")): value += 10
+            return value
+        ranked = sorted(self.policy, key=score, reverse=True)
         return ranked[:1]
 
 def respond(store: Store, message: str, order_verification: str | None = None) -> dict:
@@ -80,7 +87,7 @@ def respond(store: Store, message: str, order_verification: str | None = None) -
         products = store.search_products(); tools.append("search_products")
         evidence = store.policy_search(text); tools.append("search_policy")
         if order.get("authorized"):
-            answer = f"O pedido {order_id} está com status {order['status']}. Posso verificar produtos e a política aplicável; a evidência consultada é {evidence[0]['section']} (página {evidence[0]['page']})."
+            answer = f"O pedido {order_id} está {status_pt(order['status'])}. Posso verificar produtos e a política aplicável; a evidência consultada é {evidence[0]['section']} (página {evidence[0]['page']})."
         else:
             answer = "Não vou expor o pedido sem validação do titular. Posso, ainda assim, consultar produtos e a política geral da loja."
     elif is_product:
@@ -91,10 +98,13 @@ def respond(store: Store, message: str, order_verification: str | None = None) -
     elif is_order:
         m = re.search(r"(?:pedido|#)\s*(\d+)", text); order_id = int(m.group(1)) if m else 0
         result = store.get_order(order_id, order_verification); tools.append("get_order_status")
-        answer = f"O pedido {order_id} está com status {result['status']}." if result.get("authorized") else "Para consultar o pedido, preciso validar um dado do titular. Não vou expor informações apenas com o número do pedido."
+        answer = f"O pedido {order_id} está {status_pt(result['status'])}." if result.get("authorized") else "Para consultar o pedido, preciso validar um dado do titular. Não vou expor informações apenas com o número do pedido."
     elif is_policy:
         evidence = store.policy_search(text); tools.append("search_policy")
         answer = evidence[0]["text"] if evidence else "Não encontrei uma política aplicável; vou encaminhar para atendimento."
     else:
         answer = "Posso ajudar com instrumentos, disponibilidade, pedidos e políticas da loja."
     return {"answer": answer, "tools": tools, "evidence": evidence}
+
+def status_pt(status: str) -> str:
+    return {"delivered": "entregue", "processing": "em processamento", "shipped": "enviado", "cancelled": "cancelado", "pending": "pendente"}.get(status, status)
