@@ -8,7 +8,8 @@ def main():
     if command == "evaluate":
         from tests.evaluation import run; raise SystemExit(run(store))
     if command == "ingest":
-        print("PostgreSQL/pgvector ingestion requires: pip install -e '.[postgres]' and DATABASE_URL. Not run in local mock mode.")
+        from .postgres import reset_and_import
+        print(reset_and_import(Path(__file__).resolve().parents[1]))
         return
     message = " ".join(sys.argv[2:] if command == "chat" else sys.argv[1:])
     print(respond(store, message))

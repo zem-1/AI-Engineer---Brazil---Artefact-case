@@ -39,6 +39,10 @@ def installments(total: Decimal, count: int) -> dict:
 class Store:
     def __init__(self, root: Path):
         data = root / "Desafio Técnico AI Engineer 2026" / "data"
+        data_candidates = [p for p in root.glob("*/data") if (p / "desafio_tecnico_ai_eng - products.csv").exists()]
+        if not data_candidates:
+            raise FileNotFoundError("Could not find source data directory with products CSV")
+        data = data_candidates[0]
         self.products = self._products(data / "desafio_tecnico_ai_eng - products.csv")
         self.promotions = self._promotions(data / "desafio_tecnico_ai_eng - promotions.csv")
         self.orders = self._orders(data / "desafio_tecnico_ai_eng - orders.csv")

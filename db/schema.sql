@@ -1,0 +1,10 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE TABLE IF NOT EXISTS categories (category_id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS products (product_id INTEGER PRIMARY KEY, price_brl NUMERIC(12,2) NOT NULL, name TEXT NOT NULL, category_id INTEGER REFERENCES categories(category_id), description TEXT NOT NULL, stock_quantity INTEGER NOT NULL, status TEXT NOT NULL, specs JSONB, created_at DATE);
+CREATE TABLE IF NOT EXISTS promotions (promotion_id INTEGER PRIMARY KEY, product_id INTEGER REFERENCES products(product_id), discount_percent NUMERIC(5,2) NOT NULL, description TEXT NOT NULL, is_active BOOLEAN NOT NULL);
+CREATE TABLE IF NOT EXISTS customers (customer_id INTEGER PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL, city TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS orders (order_id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(customer_id), order_date DATE NOT NULL, status TEXT NOT NULL, total_brl NUMERIC(12,2) NOT NULL, payment_method TEXT NOT NULL, tracking_code TEXT, estimated_delivery DATE, notes TEXT);
+CREATE TABLE IF NOT EXISTS order_items (order_id INTEGER REFERENCES orders(order_id), quantity INTEGER NOT NULL, product_id INTEGER REFERENCES products(product_id), PRIMARY KEY (order_id, product_id));
+CREATE TABLE IF NOT EXISTS policy_chunks (id BIGSERIAL PRIMARY KEY, document_name TEXT NOT NULL, document_version TEXT NOT NULL, section TEXT NOT NULL, page INTEGER NOT NULL, content TEXT NOT NULL, embedding VECTOR(384), source_hash TEXT NOT NULL UNIQUE);
+CREATE INDEX IF NOT EXISTS products_active_stock_idx ON products(status, stock_quantity);
+CREATE INDEX IF NOT EXISTS promotions_active_idx ON promotions(is_active);
