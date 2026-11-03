@@ -3,6 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 from app.core import Store, installments, sale_price
 from app.postgres import policy_chunks
+from app.tools import call_tool
 
 class CoreTests(unittest.TestCase):
     @classmethod
@@ -21,5 +22,7 @@ class CoreTests(unittest.TestCase):
         chunks = policy_chunks("Heading\nPIX is not stackable\fReturns in seven days", "policy.pdf")
         self.assertEqual([c["page"] for c in chunks], [1, 2])
         self.assertTrue(all(c["source_hash"] for c in chunks))
+    def test_tool_registry_rejects_arbitrary_sql(self):
+        with self.assertRaises(ValueError): call_tool(self.store, "execute_sql", {"query": "DROP TABLE products"})
 
 if __name__ == "__main__": unittest.main()
