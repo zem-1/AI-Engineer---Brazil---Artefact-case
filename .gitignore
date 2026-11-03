@@ -1,0 +1,34 @@
+# Internal AI development instructions
+/CODEX_PROMPT.md
+/START_HERE.md
+/artefact_codex_handoff/
+
+# Internal planning and working documents
+/docs/ACCEPTANCE_CHECKLIST.md
+/docs/CASE_REQUIREMENTS.md
+/docs/CHANGELOG_DECISIONS.md
+/docs/DATA_AND_POLICY_NOTES.md
+
+# Source challenge materials (keep local; do not publish customer snapshots)
+/Desafio Técnico AI Engineer 2026/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Local databases and logs
+*.db
+*.sqlite3
+*.log
+
+# Local runtime output
+runtime/
