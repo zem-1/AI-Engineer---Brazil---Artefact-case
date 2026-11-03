@@ -155,11 +155,19 @@ Codex and other AI assistants helped draft implementation code, tests, documenta
 
 ## Português (Brasil)
 
-### Resumo
+### Resumo executivo
 
-Este repositório contém um agente Python pequeno e reproduzível de atendimento ao cliente para o case de AI Engineer da Artefact. O agente responde em português brasileiro e usa tools limitadas para produtos, promoções, pedidos, preços e políticas da loja.
+Este repositório contém um agente Python pequeno e reproduzível de atendimento para o case de AI Engineer da Artefact. Ele responde mensagens em português brasileiro e usa tools limitadas para produtos, promoções, pedidos, preços e políticas da loja.
 
-A separação principal é entre fatos determinísticos e comportamento de linguagem: PostgreSQL guarda os dados operacionais; a recuperação de políticas usa full-text por padrão e possui caminho opcional com pgvector; Python controla preços, estoque, parcelas, privacidade e elegibilidade; o LLM apenas seleciona tools e redige a resposta.
+A implementação separa fatos determinísticos do comportamento de linguagem:
+
+- PostgreSQL guarda os dados operacionais estruturados.
+- PostgreSQL + pgvector está preparado para embeddings das políticas.
+- Full-text no PostgreSQL é o fallback reproduzível padrão para o manual curto.
+- Python controla preços, estoque, parcelas, privacidade e elegibilidade.
+- O LLM pode selecionar tools e escrever a resposta, mas não pode gerar SQL nem inventar fatos.
+
+O modo `mock` não exige credenciais e é o caminho reprodutível de avaliação. Ollama é um provider local opcional; OpenAI também é opcional quando configurado explicitamente.
 
 ### Execução rápida
 
@@ -169,11 +177,55 @@ python -m app.cli evaluate
 python -m app.cli chat "Qual o status do pedido 1?"
 ```
 
-O mock não exige Docker, chave de API ou LLM. Para PostgreSQL, instale `pip install -e ".[api,postgres]"`, rode `docker compose up -d db`, defina `DATABASE_URL`, e execute `python -m app.cli ingest` e `python -m app.cli ingest-policy-lexical`.
+O mock não exige Docker, chave de API ou LLM. A suíte validada possui 15 testes unitários e 13 casos determinísticos.
 
-### Ollama opcional
+### PostgreSQL e ingestão das políticas
 
-Ollama não é obrigatório. Para usar um LLM local:
+```powershell
+pip install -e ".[api,postgres]"
+docker compose up -d db
+$env:DATABASE_URL="postgresql://empordb:empordb@localhost:5432/emporio"
+$env:DATA_BACKEND="postgres"
+$env:POLICY_RETRIEVAL="lexical"
+python -m app.cli ingest
+python -m app.cli ingest-policy-lexical
+```
+
+`ingest` importa os seis snapshots CSV para o PostgreSQL e normaliza valores opcionais, JSON, booleanos e totais de pedidos. Pode ser repetido com segurança porque reseta as tabelas importadas antes da carga.
+
+`ingest-policy-lexical` extrai o PDF por página e armazena chunks com metadados de origem. A busca lexical padrão não exige download de modelo e retorna documento, página, seção e conteúdo. A ingestão semântica é opcional:
+
+```powershell
+$env:POLICY_RETRIEVAL="semantic"
+python -m app.cli ingest-policy
+```
+
+Os PDFs e CSVs originais do desafio permanecem locais e são excluídos intencionalmente do Git. Um avaliador público deve fornecer os arquivos localmente ou usar um fixture seguro.
+
+### API
+
+```powershell
+pip install -e ".[api]"
+$env:LLM_PROVIDER="mock"
+uvicorn app.api:app --reload
+```
+
+Endpoints:
+
+- `GET /health` informa o backend de dados ativo.
+- `POST /chat` aceita `message` e `order_verification` opcional.
+
+Exemplo:
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/chat -Method POST `
+  -ContentType "application/json" `
+  -Body '{"message":"Tem violão disponível até R$ 700?"}'
+```
+
+### LLM local opcional com Ollama
+
+Ollama não é necessário para instalação ou avaliação. Ele está disponível por um profile opt-in do Docker Compose:
 
 ```powershell
 docker compose --profile llm up -d
@@ -181,16 +233,77 @@ docker compose exec ollama ollama pull llama3.1:8b
 $env:LLM_PROVIDER="ollama"
 $env:LLM_MODEL="llama3.1:8b"
 $env:OLLAMA_BASE_URL="http://localhost:11434"
+$env:DATA_BACKEND="postgres"
+uvicorn app.api:app --reload
 ```
 
-O modelo fica no volume persistente `ollama_data` e não é baixado automaticamente. Sem Ollama, use `LLM_PROVIDER=mock`.
+O modelo fica no volume persistente `ollama_data` e não é baixado automaticamente. Se Ollama não estiver disponível, use `LLM_PROVIDER=mock`; o agente determinístico continua funcionando. O adapter OpenAI opcional exige `OPENAI_API_KEY` somente quando `LLM_PROVIDER=openai`.
 
-### Arquitetura e segurança
+### Arquitetura e decisões
 
-A consideração inicial foi SQLite com consulta direta do PDF curto. O candidato escolheu PostgreSQL + pgvector para manter dados estruturados em SQL e criar um caminho RAG extensível para políticas. Como o manual possui apenas oito páginas, o fallback lexical é o caminho validado e reproduzível.
+```text
+Mensagem do cliente (PT-BR) -> roteador limitado de agente/tools
+                                  |-> PostgreSQL SQL: catálogo, promoções, pedidos
+                                  |-> busca lexical ou pgvector: políticas
+                                  `-> resposta fundamentada em PT-BR
+```
 
-Não há SQL arbitrário gerado pelo modelo. Estoque, preços, descontos, parcelas e autorização são determinísticos. Consultas de pedido exigem validação demonstrativa e não retornam PII.
+A consideração inicial foi Python/FastAPI com SQLite para dados estruturados e consulta direta do PDF curto. O candidato escolheu um único PostgreSQL com pgvector. A arquitetura híbrida mantém fatos operacionais determinísticos em SQL/Python e oferece um caminho semântico extensível para políticas.
 
-### Avaliação e limitações
+O manual possui apenas oito páginas, então pgvector é demonstrativo, não uma necessidade de escala atual. Suas vantagens são uma infraestrutura extensível e metadados de origem inspecionáveis. Os custos são setup do banco, gerenciamento do modelo de embeddings, validação de dimensão e complexidade de ingestão. O fallback lexical é mantido para reprodutibilidade e precisão textual.
 
-O projeto possui testes para roteamento, estoque, promoções, PIX, parcelas, políticas, privacidade, prompt injection, SQL arbitrário e PII. O modo mock valida segurança e roteamento, mas não mede qualidade linguística de LLM. Ollama e embeddings semânticos são opcionais; os resultados realmente executados estão em [docs/EVALUATION_RESULTS.md](docs/EVALUATION_RESULTS.md).
+Consulte [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/DECISION_LOG.md](docs/DECISION_LOG.md).
+
+### Tools e segurança
+
+Tools permitidas:
+
+- `search_products`
+- `get_product`
+- `get_order_status`
+- `price_quote`
+- `search_policy`
+- `get_store_info`
+
+Proteções:
+
+- nenhum SQL arbitrário gerado pelo modelo;
+- queries PostgreSQL parametrizadas;
+- estoque ativo exige status ativo e quantidade positiva;
+- PIX não acumula com promoção ativa;
+- moeda e parcelas são calculadas deterministicamente;
+- consulta de pedido exige verificação demonstrativa correspondente;
+- dados de contato de clientes não são retornados;
+- prompt injection, limites de SQL e tentativas de PII são testados;
+- a verificação demonstrativa não é autenticação de produção.
+
+As respostas para clientes são PT-BR; identificadores, tools, APIs e documentação técnica são em inglês.
+
+### Avaliação e exemplos
+
+```powershell
+python -m unittest discover -s tests -v
+python -m app.cli evaluate
+```
+
+A suíte cobre roteamento, estoque, promoções, PIX, parcelas, evidência de políticas, solicitações fora do escopo, privacidade, limites de tools, prompt injection, tentativas de SQL arbitrário, proteção de PII e fluxo multi-tool. Os exemplos públicos estão em [examples/](examples/).
+
+### Limitações
+
+- Os CSVs originais de clientes e os PDFs da política são inputs locais do desafio e não estão no repositório público.
+- A busca lexical é o caminho validado padrão. A ingestão semântica depende do download do modelo de embeddings configurado.
+- Function calling com Ollama está implementado, mas exige um modelo Ollama local para um transcript LLM real.
+- O mock valida roteamento e segurança deterministicamente; não mede qualidade linguística de LLM.
+- Os CSVs são snapshots, não dados de comércio em tempo real.
+- Produção exigiria sessões autenticadas, integração com comércio, logs redigidos, auditoria e monitoramento.
+
+### Declaração de desenvolvimento assistido por IA
+
+Codex e outros assistentes de IA ajudaram a elaborar código, testes, documentação e casos de avaliação. O candidato revisou a arquitetura e executou os comandos reportados. Nenhuma credencial, benchmark inventado ou histórico Git falsificado foi incluído.
+
+### Rastreabilidade
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — limites e trade-offs do sistema.
+- [docs/DECISION_LOG.md](docs/DECISION_LOG.md) — evolução de SQLite para PostgreSQL + pgvector.
+- [docs/EVALUATION_RESULTS.md](docs/EVALUATION_RESULTS.md) — execuções reais e limitações.
+- [examples/](examples/) — exemplos públicos de interação.
