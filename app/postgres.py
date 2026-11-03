@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import csv, hashlib, os, re
+import csv, hashlib, json, os, re
 from decimal import Decimal
 from pathlib import Path
 from .core import Product, Promotion, sale_price, installments
@@ -15,6 +15,23 @@ def source_data_dir(root: Path) -> Path:
 def rows(path: Path):
     with path.open(encoding="utf-8-sig", newline="") as handle: return list(csv.DictReader(handle))
 
+def database_values(table: str, columns: list[str], values: list[dict]):
+    Jsonb = None
+    if table == "products" and "specs" in columns:
+        from psycopg.types.json import Jsonb
+    result = []
+    for row in values:
+        item = []
+        for column in columns:
+            value = row[column]
+            if value == "": value = None
+            if table == "products" and column == "specs" and value is not None: value = Jsonb(json.loads(value))
+            if table == "promotions" and column == "is_active": value = value == "1"
+            if table == "orders" and column == "total_brl" and value is not None: value = Decimal(value) / 100
+            item.append(value)
+        result.append(tuple(item))
+    return result
+
 def connect():
     try: import psycopg
     except ImportError as exc: raise RuntimeError("Install PostgreSQL support with: pip install -e '.[postgres]'") from exc
@@ -27,8 +44,14 @@ class PostgresStore:
     def __init__(self): self.conn = connect()
     def close(self): self.conn.close()
     def search_products(self, budget=None):
+        query = "SELECT product_id,name,price_brl,stock_quantity,status,category_id FROM products WHERE status=%s AND stock_quantity>0"
+        params = ["active"]
+        if budget is not None:
+            query += " AND price_brl<=%s"
+            params.append(budget)
+        query += " ORDER BY name LIMIT 20"
         with self.conn.cursor() as cur:
-            cur.execute("SELECT product_id,name,price_brl,stock_quantity,status,category_id FROM products WHERE status=%s AND stock_quantity>0 AND (%s IS NULL OR price_brl<=%s) ORDER BY name LIMIT 20", ("active", budget, budget))
+            cur.execute(query, params)
             return [Product(r[0], r[1], Decimal(r[2]), r[3], r[4], r[5]) for r in cur.fetchall()]
     def get_product(self, product_id):
         with self.conn.cursor() as cur:
@@ -68,7 +91,7 @@ def reset_and_import(root: Path) -> dict:
             values = rows(path)
             columns = list(values[0])
             with conn.cursor() as cur:
-                cur.executemany(f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join(['%s'] * len(columns))})", [tuple(r[c] for c in columns) for r in values])
+                cur.executemany(f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join(['%s'] * len(columns))})", database_values(table, columns, values))
             counts[table] = len(values)
         conn.commit()
     return counts
