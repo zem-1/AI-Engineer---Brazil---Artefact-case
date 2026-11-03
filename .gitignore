@@ -24,6 +24,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .mypy_cache/
+*.egg-info/
 
 # Local databases and logs
 *.db
