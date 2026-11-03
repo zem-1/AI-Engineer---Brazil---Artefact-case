@@ -8,3 +8,4 @@ CREATE TABLE IF NOT EXISTS order_items (order_id INTEGER REFERENCES orders(order
 CREATE TABLE IF NOT EXISTS policy_chunks (id BIGSERIAL PRIMARY KEY, document_name TEXT NOT NULL, document_version TEXT NOT NULL, section TEXT NOT NULL, page INTEGER NOT NULL, content TEXT NOT NULL, embedding VECTOR(384), source_hash TEXT NOT NULL UNIQUE);
 CREATE INDEX IF NOT EXISTS products_active_stock_idx ON products(status, stock_quantity);
 CREATE INDEX IF NOT EXISTS promotions_active_idx ON promotions(is_active);
+CREATE INDEX IF NOT EXISTS policy_chunks_fts_idx ON policy_chunks USING GIN (to_tsvector('simple', content));

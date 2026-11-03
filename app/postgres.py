@@ -72,11 +72,15 @@ class PostgresStore:
     def policy_search(self, query):
         try:
             from sentence_transformers import SentenceTransformer
-        except ImportError as exc: raise RuntimeError("Install policy retrieval support with: pip install -e '.[postgres]'") from exc
+        except ImportError: return self.policy_search_lexical(query)
         vector = SentenceTransformer(os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")).encode(query, normalize_embeddings=True)
         vector_text = "[" + ",".join(str(float(x)) for x in vector) + "]"
         with self.conn.cursor() as cur:
             cur.execute("SELECT document_name,section,page,content FROM policy_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> %s::vector LIMIT 3", (vector_text,))
+            return [{"document": r[0], "section": r[1], "page": r[2], "text": r[3]} for r in cur.fetchall()]
+    def policy_search_lexical(self, query):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT document_name,section,page,content FROM policy_chunks WHERE to_tsvector('simple', content) @@ plainto_tsquery('simple', %s) ORDER BY page LIMIT 3", (query,))
             return [{"document": r[0], "section": r[1], "page": r[2], "text": r[3]} for r in cur.fetchall()]
 
 def reset_and_import(root: Path) -> dict:
@@ -128,5 +132,23 @@ def ingest_policy(root: Path) -> int:
                 cur.execute("""INSERT INTO policy_chunks (document_name, document_version, section, page, content, embedding, source_hash)
                     VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (source_hash) DO UPDATE SET content=EXCLUDED.content, embedding=EXCLUDED.embedding""",
                     (*[chunk[k] for k in ("document_name", "document_version", "section", "page", "content")], "[" + ",".join(str(float(x)) for x in vector) + "]", chunk["source_hash"]))
+        conn.commit()
+    return len(chunks)
+
+def ingest_policy_lexical(root: Path) -> int:
+    """Import policy evidence without an embedding model as a deterministic fallback."""
+    try: from pypdf import PdfReader
+    except ImportError as exc: raise RuntimeError("Install PDF support with: pip install -e '.[postgres]'") from exc
+    data = source_data_dir(root); pdf = next(data.glob("*.pdf"), None)
+    if pdf is None: raise FileNotFoundError("Policy PDF not found")
+    text = "\f".join(page.extract_text() or "" for page in PdfReader(str(pdf)).pages)
+    chunks = policy_chunks(text, pdf.name)
+    with connect() as conn:
+        conn.execute(SCHEMA.read_text(encoding="utf-8"))
+        with conn.cursor() as cur:
+            for chunk in chunks:
+                cur.execute("""INSERT INTO policy_chunks (document_name, document_version, section, page, content, source_hash)
+                    VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (source_hash) DO UPDATE SET content=EXCLUDED.content""",
+                    tuple(chunk[k] for k in ("document_name", "document_version", "section", "page", "content", "source_hash")))
         conn.commit()
     return len(chunks)
