@@ -16,6 +16,8 @@ For optional local Ollama tool calling, install the API extra, install Ollama se
 
 Install the runtime extras for API/Postgres execution with `pip install -e .[api,postgres]`, copy `.env.example` to `.env`, then start `docker compose up -d db`. Run `python -m app.cli ingest` for the six CSVs and `python -m app.cli ingest-policy-lexical` for reproducible PDF extraction and PostgreSQL full-text evidence. The default `POLICY_RETRIEVAL=lexical` avoids requiring a model download; set it to `semantic` and run `ingest-policy` only when the embedding model is available. The source CSV/PDF files remain local by design.
 
+To run a local LLM without an OpenAI key, start the optional Compose profile: `docker compose --profile llm up -d`. Then download a tool-capable model once with `docker compose exec ollama ollama pull llama3.1:8b`. The model is stored in the persistent `ollama_data` volume; it is not downloaded automatically during startup. Set `LLM_PROVIDER=ollama`, `LLM_MODEL=llama3.1:8b`, and `OLLAMA_BASE_URL=http://localhost:11434` before starting the API. The default Compose command starts only PostgreSQL, so Ollama is not required for evaluation.
+
 The original recommendation was SQLite plus direct policy lookup. The applicant explicitly chose PostgreSQL + pgvector; that choice is preserved and documented in [docs/DECISION_LOG.md](artefact_codex_handoff/docs/DECISION_LOG.md). See [docs/EVALUATION_RESULTS.md](docs/EVALUATION_RESULTS.md) for actual executions and limitations. Codex assisted with implementation and documentation; all claims in this README are limited to commands actually run.
 
 ## Português (Brasil)
@@ -25,6 +27,8 @@ Este é um protótipo Python pequeno e reproduzível de atendimento para o case 
 O avaliador local funciona sem credenciais ou pacotes de terceiros; o caminho FastAPI/PostgreSQL é habilitado pelas dependências opcionais e pelo Docker Compose.
 
 Para usar PostgreSQL e a recuperação de políticas, instale `pip install -e .[api,postgres]`, copie `.env.example` para `.env`, inicie `docker compose up -d db`, rode `python -m app.cli ingest` para os CSVs e `python -m app.cli ingest-policy-lexical` para o PDF. O padrão `POLICY_RETRIEVAL=lexical` não exige download de modelo; use `semantic` e `ingest-policy` somente quando o modelo de embeddings estiver disponível. Os arquivos-fonte permanecem locais por decisão de segurança.
+
+Para executar um LLM local sem chave OpenAI, inicie o profile opcional com `docker compose --profile llm up -d`. Baixe uma vez um modelo compatível com tools usando `docker compose exec ollama ollama pull llama3.1:8b`. O modelo fica no volume persistente `ollama_data` e não é baixado automaticamente no startup. Defina `LLM_PROVIDER=ollama`, `LLM_MODEL=llama3.1:8b` e `OLLAMA_BASE_URL=http://localhost:11434` antes de iniciar a API. O comando padrão inicia apenas o PostgreSQL; Ollama não é necessário para a avaliação.
 
 Para usar function calling local opcional com Ollama, instale o Ollama separadamente, baixe um modelo compatível com tools, defina `LLM_PROVIDER=ollama`, `LLM_MODEL` e, se necessário, `OLLAMA_BASE_URL`. Ollama não é obrigatório para instalação ou avaliação. Sem LLM local, mantenha `LLM_PROVIDER=mock`; o agente determinístico continua disponível. OpenAI também é um provider opcional, mas nenhuma chave é necessária neste repositório.
 

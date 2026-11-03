@@ -11,3 +11,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  ollama:
+    image: ollama/ollama
+    profiles: ["llm"]
+    ports: ["11434:11434"]
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:
