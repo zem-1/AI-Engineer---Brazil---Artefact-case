@@ -1,6 +1,7 @@
 """Optional FastAPI adapter around the deterministic agent."""
 
 from pathlib import Path
+import os
 from .core import Store, respond
 
 try:
@@ -11,7 +12,13 @@ except ImportError:  # pragma: no cover - dependency is optional for local mock 
 
 if FastAPI:
     app = FastAPI(title="Empório da Música support agent")
-    store = Store(Path(__file__).resolve().parents[1])
+    if os.getenv("DATA_BACKEND", "mock") == "postgres":
+        from .postgres import PostgresStore
+        store = PostgresStore()
+        backend = "postgres"
+    else:
+        store = Store(Path(__file__).resolve().parents[1])
+        backend = "mock"
 
     class ChatRequest(BaseModel):
         message: str
@@ -19,7 +26,7 @@ if FastAPI:
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "mode": "deterministic-mock"}
+        return {"status": "ok", "mode": backend}
 
     @app.post("/chat")
     def chat(request: ChatRequest):

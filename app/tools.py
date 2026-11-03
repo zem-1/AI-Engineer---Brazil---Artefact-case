@@ -11,7 +11,7 @@ def search_products(store: Store, budget: Decimal | None = None):
     return [{"product_id": p.product_id, "name": p.name, "price": p.price, "stock": p.stock, "status": p.status} for p in store.search_products(budget)]
 
 def get_product(store: Store, product_id: int):
-    product = store.products.get(product_id)
+    product = store.get_product(product_id) if hasattr(store, "get_product") else store.products.get(product_id)
     if not product: return {"found": False}
     return {"found": True, "product_id": product.product_id, "name": product.name, "price": product.price, "stock": product.stock, "status": product.status}
 
@@ -19,9 +19,10 @@ def get_order_status(store: Store, order_id: int, verification: str | None = Non
     return store.get_order(order_id, verification)
 
 def price_quote(store: Store, product_id: int, payment: str | None = None, installment_count: int | None = None):
-    product = store.products.get(product_id)
+    product = store.get_product(product_id) if hasattr(store, "get_product") else store.products.get(product_id)
     if not product: return {"found": False}
-    result = sale_price(product, store.promotions.get(product_id), payment)
+    promotion = store.get_promotion(product_id) if hasattr(store, "get_promotion") else store.promotions.get(product_id)
+    result = sale_price(product, promotion, payment)
     if installment_count is not None: result["installments"] = installments(result["current_price"], installment_count)
     result["product_id"] = product_id
     return result

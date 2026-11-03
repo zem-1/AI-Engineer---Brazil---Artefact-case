@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv, hashlib, os, re
+from decimal import Decimal
 from pathlib import Path
+from .core import Product, Promotion, sale_price, installments
 
 SCHEMA = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
 
@@ -19,6 +21,40 @@ def connect():
     url = os.getenv("DATABASE_URL")
     if not url: raise RuntimeError("DATABASE_URL is required for PostgreSQL commands")
     return psycopg.connect(url)
+
+class PostgresStore:
+    """Production data backend used by the same bounded tools as the local mock."""
+    def __init__(self): self.conn = connect()
+    def close(self): self.conn.close()
+    def search_products(self, budget=None):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT product_id,name,price_brl,stock_quantity,status,category_id FROM products WHERE status=%s AND stock_quantity>0 AND (%s IS NULL OR price_brl<=%s) ORDER BY name LIMIT 20", ("active", budget, budget))
+            return [Product(r[0], r[1], Decimal(r[2]), r[3], r[4], r[5]) for r in cur.fetchall()]
+    def get_product(self, product_id):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT product_id,name,price_brl,stock_quantity,status,category_id FROM products WHERE product_id=%s", (product_id,))
+            r = cur.fetchone()
+        return None if not r else Product(r[0], r[1], Decimal(r[2]), r[3], r[4], r[5])
+    def get_promotion(self, product_id):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT product_id,discount_percent,description,is_active FROM promotions WHERE product_id=%s AND is_active=TRUE LIMIT 1", (product_id,))
+            r = cur.fetchone()
+        return None if not r else Promotion(r[0], Decimal(r[1]), r[2], r[3])
+    def get_order(self, order_id, verification=None):
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT order_id,customer_id,status,total_brl FROM orders WHERE order_id=%s", (order_id,))
+            r = cur.fetchone()
+        if not r or verification != str(r[1]): return {"authorized": False, "reason": "verification_required"}
+        return {"authorized": True, "order_id": r[0], "status": r[2], "total": Decimal(r[3])}
+    def policy_search(self, query):
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc: raise RuntimeError("Install policy retrieval support with: pip install -e '.[postgres]'") from exc
+        vector = SentenceTransformer(os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")).encode(query, normalize_embeddings=True)
+        vector_text = "[" + ",".join(str(float(x)) for x in vector) + "]"
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT document_name,section,page,content FROM policy_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> %s::vector LIMIT 3", (vector_text,))
+            return [{"document": r[0], "section": r[1], "page": r[2], "text": r[3]} for r in cur.fetchall()]
 
 def reset_and_import(root: Path) -> dict:
     data = source_data_dir(root)
