@@ -4,6 +4,7 @@ from pathlib import Path
 from app.core import Store, installments, sale_price
 from app.postgres import policy_chunks
 from app.tools import call_tool, TOOL_NAMES
+from app.agent import run_agent
 
 class CoreTests(unittest.TestCase):
     @classmethod
@@ -25,5 +26,8 @@ class CoreTests(unittest.TestCase):
     def test_tool_registry_rejects_arbitrary_sql(self):
         with self.assertRaises(ValueError): call_tool(self.store, "execute_sql", {"query": "DROP TABLE products"})
     def test_tool_registry_is_bounded(self): self.assertNotIn("execute_sql", TOOL_NAMES)
+    def test_mock_agent_is_available_without_credentials(self):
+        result = run_agent(self.store, "Tem violão disponível até R$ 700?")
+        self.assertIn("search_products", result["tools"])
 
 if __name__ == "__main__": unittest.main()

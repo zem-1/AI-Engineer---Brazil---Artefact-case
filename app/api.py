@@ -2,7 +2,8 @@
 
 from pathlib import Path
 import os
-from .core import Store, respond
+from .core import Store
+from .agent import run_agent
 
 try:
     from fastapi import FastAPI
@@ -30,6 +31,6 @@ if FastAPI:
 
     @app.post("/chat")
     def chat(request: ChatRequest):
-        return respond(store, request.message, request.order_verification)
+        return run_agent(store, request.message, request.order_verification)
 else:
     app = None
