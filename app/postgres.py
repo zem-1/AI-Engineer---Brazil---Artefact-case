@@ -70,6 +70,7 @@ class PostgresStore:
         if not r or verification != str(r[1]): return {"authorized": False, "reason": "verification_required"}
         return {"authorized": True, "order_id": r[0], "status": r[2], "total": Decimal(r[3])}
     def policy_search(self, query):
+        if os.getenv("POLICY_RETRIEVAL", "lexical") != "semantic": return self.policy_search_lexical(query)
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError: return self.policy_search_lexical(query)
@@ -80,7 +81,7 @@ class PostgresStore:
             return [{"document": r[0], "section": r[1], "page": r[2], "text": r[3]} for r in cur.fetchall()]
     def policy_search_lexical(self, query):
         with self.conn.cursor() as cur:
-            cur.execute("SELECT document_name,section,page,content FROM policy_chunks WHERE to_tsvector('simple', content) @@ plainto_tsquery('simple', %s) ORDER BY page LIMIT 3", (query,))
+            cur.execute("SELECT document_name,section,page,content FROM policy_chunks WHERE to_tsvector('simple', content) @@ plainto_tsquery('simple', %s) ORDER BY ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', %s)) DESC, page LIMIT 3", (query, query))
             return [{"document": r[0], "section": r[1], "page": r[2], "text": r[3]} for r in cur.fetchall()]
 
 def reset_and_import(root: Path) -> dict:
